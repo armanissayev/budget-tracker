@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background-color: #343a40;
+        }
+        .nav-link {
+            color: #fff;
+        }
+        .nav-link:hover {
+            background-color: #495057;
+        }
+        .main-content {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            
+            <div class="col-md-2 sidebar p-3">
+                <h3 class="text-white mb-4">Admin Panel</h3>
+                <p class="text-white" id="currentUser">Welcome, </p>
+                <button class="btn btn-light mt-2" onclick="logout()">Logout</button>
+            </div>
+
+            <div class="col-md-10 main-content">
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Total Users</h5>
+                                <h2 class="card-text" id="totalUsers">0</h2>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-9 text-end">
+                        <button class="btn btn-primary" onclick="showAddUserModal()">
+                            <i class="bi bi-plus"></i> Add New User
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Data Management</h5>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Username</th>
+                                            <th>Creation Date</th>
+                                            <th>Last Update</th>
+                                            <th>Deleted Date</th>
+                                            <th>Admin Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dataTable">
+                                        
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        
+        const tableHeaders = document.querySelector('thead tr');
+        tableHeaders.innerHTML = `
+            <th>Username</th>
+            <th>Creation Date</th>
+            <th>Last Update</th>
+            <th>Deleted Date</th>
+            <th>Admin Status</th>
+            <th>Actions</th>
+        `;
+
+        function getTokenFromCookies() {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'token') {
+                    return value;
+                }
+            }
+            return null;
+        }
+
+        async function checkAdminStatus(token) {
+            if (!token) {
+                window.location.href = '/login';
+                return false;
+            }
+
+            try {
+                const response = await fetch('http://localhost:3000/api/admin/checkAdmin', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        token: token
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to verify admin status');
+                }
+
+                const data = await response.json();
+                document.getElementById('currentUser').textContent = `Welcome, ${data.username}`;
+                return data.userAdmin;
+
+            } catch (error) {
+                console.error('Error checking admin status:', error);
+                window.location.href = '/login';
+                return false;
+            }
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            return new Date(dateString).toLocaleString();
+        }
+
+
+        
+        async function fetchAndDisplayUsers() {
+            const token = getTokenFromCookies();
+            if (!(await checkAdminStatus(token))) {
+                return;
+            }
+            try {
+                const response = await fetch('http://localhost:3000/api/admin/getAllUsers');
+                const users = await response.json();
+                
+                
+                document.getElementById('totalUsers').textContent = users.length;
+                
+                
+                const tableBody = document.getElementById('dataTable');
+                tableBody.innerHTML = '';
+                
+                users.forEach(user => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${user.username}</td>
+                        <td>${formatDate(user.creationDate)}</td>
+                        <td>${formatDate(user.updateDate)}</td>
+                        <td>${formatDate(user.deletedDate)}</td>
+                        <td>
+                            <span class="badge ${user.admin ? 'bg-success' : 'bg-secondary'}">
+                                ${user.admin ? 'Admin' : 'User'}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="editUser('${user.username}', '${user._id}')">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteUser('${user.username}', '${user._id}')">Delete</button>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error fetching users:', error);
+                alert('Failed to load users. Please try again.');
+            }
+        }
+
+        async function deleteUser(username, userID) {
+            const token = getTokenFromCookies();
+            const adminStatus = await checkAdminStatus(token);
+            if (!adminStatus) {
+                return;
+            }
+            if (confirm(`Are you sure you want to delete user "${userID}"?`)) {
+                try {
+                    const response = await fetch(`http://localhost:3000/api/admin/deleteUser`, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            adminStatus: adminStatus,
+                            userID: userID
+                        })
+                    });
+                    if (response.ok) {
+                        await fetchAndDisplayUsers();
+                        alert('User deleted successfully');
+                    } else {
+                        throw new Error('Failed to delete user');
+                    }
+                } catch (error) {
+                    console.error('Error deleting user:', error);
+                    alert('Failed to delete user. Please try again.');
+                }
+            }
+        }
+
+        async function editUser(username, userID) {
+            const token = getTokenFromCookies();
+            const adminStatus = await checkAdminStatus(token);
+            if (!adminStatus) {
+                return;
+            }
+            const modalHtml = `
+                <div class="modal fade" id="editUserModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Edit User: ${username}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="editUserForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">Username</label>
+                                        <input type="text" class="form-control" value="${username}" id="newUsername">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">New Password (leave blank to keep current)</label>
+                                        <input type="password" class="form-control" id="newPassword">
+                                    </div>
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input" id="adminStatus">
+                                        <label class="form-check-label">Admin Status</label>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="button" class="btn btn-primary" onclick="saveUserChanges('${userID}')">Save changes</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const existingModal = document.getElementById('editUserModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
+            modal.show();
+        }
+
+        async function saveUserChanges(userID) {
+            const token = getTokenFromCookies();
+            const adminStatus = await checkAdminStatus(token);
+            if (!adminStatus) {
+                return;
+            }
+            const username = document.getElementById('newUsername').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const makeAdmin = document.getElementById('adminStatus').checked;
+
+            try {
+                const response = await fetch(`http://localhost:3000/api/admin/updateUser`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userID: userID,
+                        admin: adminStatus,
+                        username: username,
+                        password: newPassword || undefined,
+                        makeAdmin: makeAdmin,
+                        updateDate: new Date().toISOString()
+                    })
+                });
+
+                if (response.ok) {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
+                    modal.hide();
+                    await fetchAndDisplayUsers(); // Refresh the table
+                    alert('User updated successfully');
+                } else {
+                    throw new Error('Failed to update user');
+                }
+            } catch (error) {
+                console.error('Error updating user:', error);
+                alert('Failed to update user. Please try again.');
+            }
+        }
+
+        async function showAddUserModal() {
+            const token = getTokenFromCookies();
+            const adminStatus = await checkAdminStatus(token);
+            if (!adminStatus) {
+                return;
+            }
+            const modalHtml = `
+                <div class="modal fade" id="addUserModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Add New User</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="addUserForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">Username</label>
+                                        <input type="text" class="form-control" id="newUsername" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Password</label>
+                                        <input type="password" class="form-control" id="newUserPassword" required>
+                                    </div>
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input" id="newUserAdminStatus">
+                                        <label class="form-check-label">Admin Status</label>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="button" class="btn btn-primary" onclick="createUser()">Create User</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const existingModal = document.getElementById('addUserModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            const modal = new bootstrap.Modal(document.getElementById('addUserModal'));
+            modal.show();
+        }
+
+        async function createUser() {
+            const token = getTokenFromCookies();
+            const adminStatus = await checkAdminStatus(token);
+            if (!adminStatus) {
+                return;
+            }
+            const username = document.getElementById('newUsername').value;
+            const password = document.getElementById('newUserPassword').value;
+            const makeAdmin = document.getElementById('newUserAdminStatus').checked;
+
+            if (!username || !password) {
+                alert('Username and password are required');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:3000/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username,
+                        password,
+                        makeAdmin: makeAdmin
+                    })
+                });
+
+                if (response.ok) {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addUserModal'));
+                    modal.hide();
+                    await fetchAndDisplayUsers(); // Refresh the table
+                    alert('User created successfully');
+                } else {
+                    throw new Error('Failed to create user');
+                }
+            } catch (error) {
+                console.error('Error creating user:', error);
+                alert('Failed to create user. Please try again.');
+            }
+        }
+
+        async function logout() {
+            // Clear the token cookie
+            document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            // Redirect to login page
+            window.location.href = '/login';
+        }
+
+        // Load users when the page loads
+        document.addEventListener('DOMContentLoaded', fetchAndDisplayUsers);
+    </script>
+</body>
+</html>
