@@ -191,8 +191,12 @@
             }
             if (confirm(`Are you sure you want to delete user "${userID}"?`)) {
                 try {
+                    console.log(adminStatus);
                     const response = await fetch(`${baseURL}/api/admin/deleteUser`, {
                         method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
                         body: JSON.stringify({
                             adminStatus: adminStatus,
                             userID: userID

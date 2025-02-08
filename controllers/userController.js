@@ -43,6 +43,8 @@ async function login(req, res) {
             return res.status(401).json({ message: 'Invalid username or password' });
         }
 
+        console.log(user);
+
         const token = jwt.sign({ userID: user._id, username: user.username, userAdmin: user.admin, userPassword: user.password }, secretKey, { expiresIn: '6h' });
         res.json({ token: token });
     } catch (error) {
@@ -118,6 +120,7 @@ async function updateUser(req, res) {
 
 async function deleteUser(req, res) {
     const { adminStatus, userID } = req.body;
+    console.log(adminStatus, userID);
     if (!adminStatus) {
         res.status(401).json({message: "You are not an admin"});
         console.log("You are not an admin");
