@@ -81,7 +81,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        
+        const baseURL = window.location.origin;
         const tableHeaders = document.querySelector('thead tr');
         tableHeaders.innerHTML = `
             <th>Username</th>
@@ -110,7 +110,7 @@
             }
 
             try {
-                const response = await fetch('http://localhost:3000/api/admin/checkAdmin', {
+                const response = await fetch(`${baseURL}/api/admin/checkAdmin`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -148,7 +148,7 @@
                 return;
             }
             try {
-                const response = await fetch('http://localhost:3000/api/admin/getAllUsers');
+                const response = await fetch(`${baseURL}/api/admin/getAllUsers`);
                 const users = await response.json();
                 
                 
@@ -191,7 +191,7 @@
             }
             if (confirm(`Are you sure you want to delete user "${userID}"?`)) {
                 try {
-                    const response = await fetch(`http://localhost:3000/api/admin/deleteUser`, {
+                    const response = await fetch(`${baseURL}/api/admin/deleteUser`, {
                         method: 'POST',
                         body: JSON.stringify({
                             adminStatus: adminStatus,
@@ -272,7 +272,7 @@
             const makeAdmin = document.getElementById('adminStatus').checked;
 
             try {
-                const response = await fetch(`http://localhost:3000/api/admin/updateUser`, {
+                const response = await fetch(`${baseURL}/api/admin/updateUser`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
@@ -367,7 +367,7 @@
             }
 
             try {
-                const response = await fetch('http://localhost:3000/api/auth/register', {
+                const response = await fetch(`${baseURL}/api/auth/register`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
