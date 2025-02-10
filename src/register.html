@@ -34,6 +34,36 @@
 
     <script>
         const baseURL = window.location.origin;
+        
+        async function checkExistingLogin() {
+            const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+            
+            if (token) {
+                try {
+                    const adminResponse = await fetch(`${baseURL}/api/admin/checkAdmin`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ token })
+                    });
+                    
+                    if (adminResponse.ok) {
+                        const adminData = await adminResponse.json();
+                        if (adminData.userAdmin) {
+                            window.location.href = '/admin';
+                        } else {
+                            window.location.href = '/';
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error checking login status:', error);
+                }
+            }
+        }
+
+        checkExistingLogin();
+
         document.getElementById('registerForm').addEventListener('submit', async function(event) {
             event.preventDefault();
 

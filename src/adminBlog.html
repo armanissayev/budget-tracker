@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background-color: #343a40;
+        }
+        .nav-link {
+            color: #fff;
+        }
+        .nav-link:hover {
+            background-color: #495057;
+        }
+        .main-content {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            
+            <div class="col-md-2 sidebar p-3">
+                <h3 class="text-white mb-4">Admin Panel</h3>
+                <p class="text-white" id="currentUser">Welcome, </p>
+                <nav class="nav flex-column mb-3">
+                    <a href="/admin?type=users" class="nav-link">Users</a>
+                    <a href="/admin?type=blog" class="nav-link">Blog Posts</a>
+                </nav>
+                <button class="btn btn-light mt-2" onclick="logout()">Logout</button>
+            </div>
+
+            <div class="col-md-10 main-content">
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Total Posts</h5>
+                                <h2 class="card-text" id="totalPosts">0</h2>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-9 text-end">
+                        <button class="btn btn-primary" onclick="showAddPostModal()">
+                            <i class="bi bi-plus"></i> Add New Post
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Data Management</h5>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Title</th>
+                                            <th>Status</th>
+                                            <th>Creation Date</th>
+                                            <th>Last Update</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dataTable">
+                                        
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const baseURL = window.location.origin;
+        const tableHeaders = document.querySelector('thead tr');
+        tableHeaders.innerHTML = `
+            <th>Title</th>
+            <th>Status</th>
+            <th>Creation Date</th>
+            <th>Last Update</th>
+            <th>Actions</th>
+        `;
+
+        function getTokenFromCookies() {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'token') {
+                    return value;
+                }
+            }
+            return null;
+        }
+
+        async function checkAdminStatus(token) {
+            if (!token) {
+                window.location.href = '/login';
+                return false;
+            }
+
+            try {
+                const response = await fetch(`${baseURL}/api/admin/checkAdmin`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        token: token
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to verify admin status');
+                }
+
+                const data = await response.json();
+                document.getElementById('currentUser').textContent = `Welcome, ${data.username}`;
+                
+                if (!data.userAdmin) {
+                    window.location.href = '/';
+                    return false;
+                }
+                
+                return data.userAdmin;
+
+            } catch (error) {
+                console.error('Error checking admin status:', error);
+                window.location.href = '/';
+                return false;
+            }
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            return new Date(dateString).toLocaleString();
+        }
+
+
+        
+        async function fetchAndDisplayPosts() {
+            const token = getTokenFromCookies();
+            if (!(await checkAdminStatus(token))) {
+                return;
+            }
+            try {
+                const response = await fetch(`${baseURL}/api/posts/getAllPosts`);
+                const posts = await response.json();
+                
+                // Sort posts by creation date (newest first)
+                posts.sort((a, b) => new Date(b.creationDate) - new Date(a.creationDate));
+                
+                document.getElementById('totalPosts').textContent = posts.length;
+                
+                const tableBody = document.getElementById('dataTable');
+                tableBody.innerHTML = '';
+                
+                posts.forEach(post => {
+                    const row = document.createElement('tr');
+                    const status = post.deletedDate ? 'Deleted' : 'Active';
+                    row.innerHTML = `
+                        <td>${post.title}</td>
+                        <td><span class="badge ${status === 'Active' ? 'bg-success' : 'bg-danger'}">${status}</span></td>
+                        <td>${formatDate(post.creationDate)}</td>
+                        <td>${formatDate(post.updateDate)}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="editPost('${post._id}')">Edit</button>
+                            ${post.deletedDate 
+                                ? `<button class="btn btn-sm btn-success" onclick="restorePost('${post._id}')">Restore</button>`
+                                : `<button class="btn btn-sm btn-danger" onclick="deletePost('${post._id}')">Delete</button>`
+                            }
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error fetching posts:', error);
+                alert('Failed to load posts. Please try again.');
+            }
+        }
+
+        async function deletePost(postId) {
+            const token = getTokenFromCookies();
+            const adminStatus = await checkAdminStatus(token);
+            if (!adminStatus) return;
+
+            const deletedDate = new Date().toISOString();
+
+            if (confirm('Are you sure you want to delete this post?')) {
+                try {
+                    const response = await fetch(`${baseURL}/api/posts/deletePost/${postId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            postId: postId,
+                            token: token,
+                            deletedDate: deletedDate
+                        })
+                    });
+                    if (response.ok) {
+                        await fetchAndDisplayPosts();
+                        alert('Post deleted successfully');
+                    } else {
+                        throw new Error('Failed to delete post');
+                    }
+                } catch (error) {
+                    console.error('Error deleting post:', error);
+                    alert('Failed to delete post. Please try again.');
+                }
+            }
+        }
+
+        async function showAddPostModal() {
+            const token = getTokenFromCookies();
+            const adminStatus = await checkAdminStatus(token);
+            if (!adminStatus) return;
+
+            const modalHtml = `
+                <div class="modal fade" id="addPostModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Add New Post</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="addPostForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">Title</label>
+                                        <input type="text" class="form-control" id="postTitle" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Content</label>
+                                        <textarea class="form-control" id="postContent" rows="10" required></textarea>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Images</label>
+                                        <div id="imageInputs">
+                                            <div class="input-group mb-2">
+                                                <input type="url" class="form-control" placeholder="Image URL" required>
+                                                <button type="button" class="btn btn-outline-danger" onclick="removeImageInput(this)">Remove</button>
+                                            </div>
+                                            <div class="input-group mb-2">
+                                                <input type="url" class="form-control" placeholder="Image URL" required>
+                                                <button type="button" class="btn btn-outline-danger" onclick="removeImageInput(this)">Remove</button>
+                                            </div>
+                                            <div class="input-group mb-2">
+                                                <input type="url" class="form-control" placeholder="Image URL" required>
+                                                <button type="button" class="btn btn-outline-danger" onclick="removeImageInput(this)">Remove</button>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="addImageInput()">Add Another Image</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="button" class="btn btn-primary" onclick="createPost()">Create Post</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const existingModal = document.getElementById('addPostModal');
+            if (existingModal) existingModal.remove();
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('addPostModal'));
+            modal.show();
+        }
+
+        function addImageInput() {
+            // Try to find imageInputs in either modal
+            const imageInputs = document.getElementById('imageInputs') || document.getElementById('editImageInputs');
+            if (!imageInputs) {
+                console.error('Image inputs container not found');
+                return;
+            }
+            
+            const newInput = document.createElement('div');
+            newInput.className = 'input-group mb-2';
+            newInput.innerHTML = `
+                <input type="url" class="form-control" placeholder="Image URL" required>
+                <button type="button" class="btn btn-outline-danger" onclick="removeImageInput(this)">Remove</button>
+            `;
+            imageInputs.appendChild(newInput);
+        }
+
+        function removeImageInput(button) {
+            const inputGroup = button.parentElement;
+            const allInputs = inputGroup.parentElement.children;
+            if (allInputs.length > 3) {
+                inputGroup.remove();
+            } else {
+                alert('Minimum 3 images are required');
+            }
+        }
+
+        function getImageUrls(containerId) {
+            const container = document.getElementById(containerId);
+            const inputs = container.getElementsByTagName('input');
+            return Array.from(inputs).map(input => input.value).filter(url => url.trim() !== '');
+        }
+
+        async function createPost() {
+            const token = getTokenFromCookies();
+            if (!token) return;
+
+            const title = document.getElementById('postTitle').value;
+            const description = document.getElementById('postContent').value;
+            const images = getImageUrls('imageInputs');
+
+            if (!title || !description || images.length < 3) {
+                alert('Title, description, and at least 3 images are required');
+                return;
+            }
+
+            const creationDate = new Date().toISOString();
+            const updateDate = new Date().toISOString();
+            const deletedDate = null;
+
+            try {
+                const response = await fetch(`${baseURL}/api/posts/createPost`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        token: token,
+                        images: images,
+                        title: title,
+                        description: description,
+                        creationDate: creationDate,
+                        updateDate: updateDate,
+                        deletedDate: deletedDate
+                    })
+                });
+
+                if (response.ok) {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addPostModal'));
+                    modal.hide();
+                    await fetchAndDisplayPosts();
+                    alert('Post created successfully');
+                } else {
+                    throw new Error('Failed to create post');
+                }
+            } catch (error) {
+                console.error('Error creating post:', error);
+                alert('Failed to create post. Please try again.');
+            }
+        }
+
+        async function editPost(postId) {
+            const token = getTokenFromCookies();
+            const adminStatus = await checkAdminStatus(token);
+            if (!adminStatus) return;
+
+            try {
+                const response = await fetch(`${baseURL}/api/posts/getPost/${postId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const post = await response.json();
+                console.log(post);
+                const imagesHtml = post.images ? post.images.map(url => `
+                    <div class="input-group mb-2">
+                        <input type="url" class="form-control" placeholder="Image URL" value="${url}" required>
+                        <button type="button" class="btn btn-outline-danger" onclick="removeImageInput(this)">Remove</button>
+                    </div>
+                `).join('') : '';
+
+                const modalHtml = `
+                    <div class="modal fade" id="editPostModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Edit Post</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <form id="editPostForm">
+                                        <div class="mb-3">
+                                            <label class="form-label">Title</label>
+                                            <input type="text" class="form-control" id="editPostTitle" value="${post.title}" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Content</label>
+                                            <textarea class="form-control" id="editPostContent" rows="10" required>${post.description}</textarea>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Images</label>
+                                            <div id="editImageInputs">
+                                                ${imagesHtml || `
+                                                    <div class="input-group mb-2">
+                                                        <input type="url" class="form-control" placeholder="Image URL" required>
+                                                        <button type="button" class="btn btn-outline-danger" onclick="removeImageInput(this)">Remove</button>
+                                                    </div>
+                                                    <div class="input-group mb-2">
+                                                        <input type="url" class="form-control" placeholder="Image URL" required>
+                                                        <button type="button" class="btn btn-outline-danger" onclick="removeImageInput(this)">Remove</button>
+                                                    </div>
+                                                    <div class="input-group mb-2">
+                                                        <input type="url" class="form-control" placeholder="Image URL" required>
+                                                        <button type="button" class="btn btn-outline-danger" onclick="removeImageInput(this)">Remove</button>
+                                                    </div>
+                                                `}
+                                            </div>
+                                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="addImageInput()">Add Another Image</button>
+                                        </div>
+                                    </form>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <button type="button" class="btn btn-primary" onclick="updatePost('${postId}')">Save changes</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                const existingModal = document.getElementById('editPostModal');
+                if (existingModal) existingModal.remove();
+
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                const modal = new bootstrap.Modal(document.getElementById('editPostModal'));
+                modal.show();
+            } catch (error) {
+                console.error('Error fetching post:', error);
+                alert('Failed to load post. Please try again.');
+            }
+        }
+
+        async function updatePost(postId) {
+            const token = getTokenFromCookies();
+            if (!token) return;
+
+            const title = document.getElementById('editPostTitle').value;
+            const description = document.getElementById('editPostContent').value;
+            const images = getImageUrls('editImageInputs');
+
+            if (!title || !description || images.length < 3) {
+                alert('Title, description, and at least 3 images are required');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${baseURL}/api/posts/updatePost`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        postId,
+                        title,
+                        description,
+                        images,
+                        token,
+                        updateDate: new Date().toISOString()
+                    })
+                });
+
+                if (response.ok) {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editPostModal'));
+                    modal.hide();
+                    await fetchAndDisplayPosts();
+                    alert('Post updated successfully');
+                } else {
+                    throw new Error('Failed to update post');
+                }
+            } catch (error) {
+                console.error('Error updating post:', error);
+                alert('Failed to update post. Please try again.');
+            }
+        }
+
+        async function restorePost(postId) {
+            const token = getTokenFromCookies();
+            const adminStatus = await checkAdminStatus(token);
+            if (!adminStatus) return;
+
+            if (confirm('Are you sure you want to restore this post?')) {
+                try {
+                    const response = await fetch(`${baseURL}/api/posts/restorePost/${postId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            postId: postId,
+                            token: token,
+                            updateDate: new Date().toISOString()
+                        })
+                    });
+                    if (response.ok) {
+                        await fetchAndDisplayPosts();
+                        alert('Post restored successfully');
+                    } else {
+                        throw new Error('Failed to restore post');
+                    }
+                } catch (error) {
+                    console.error('Error restoring post:', error);
+                    alert('Failed to restore post. Please try again.');
+                }
+            }
+        }
+
+        async function logout() {
+            // Clear the token cookie
+            document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            // Redirect to login page
+            window.location.href = '/login';
+        }
+
+        // Load posts when the page loads
+        document.addEventListener('DOMContentLoaded', fetchAndDisplayPosts);
+    </script>
+</body>
+</html>

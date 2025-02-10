@@ -30,6 +30,38 @@
 
     <script>
         const baseURL = window.location.origin;
+        
+        // Add function to check if user is already logged in
+        async function checkExistingLogin() {
+            const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+            
+            if (token) {
+                try {
+                    const adminResponse = await fetch(`${baseURL}/api/admin/checkAdmin`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ token })
+                    });
+                    
+                    if (adminResponse.ok) {
+                        const adminData = await adminResponse.json();
+                        if (adminData.userAdmin) {
+                            window.location.href = '/admin';
+                        } else {
+                            window.location.href = '/';
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error checking login status:', error);
+                }
+            }
+        }
+
+        // Check for existing login when page loads
+        checkExistingLogin();
+
         document.getElementById('loginForm').addEventListener('submit', async function(event) {
             event.preventDefault();
 

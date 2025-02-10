@@ -28,6 +28,10 @@
             <div class="col-md-2 sidebar p-3">
                 <h3 class="text-white mb-4">Admin Panel</h3>
                 <p class="text-white" id="currentUser">Welcome, </p>
+                <nav class="nav flex-column mb-3">
+                    <a href="/admin" class="nav-link">Users</a>
+                    <a href="/admin?type=blog" class="nav-link">Blog Posts</a>
+                </nav>
                 <button class="btn btn-light mt-2" onclick="logout()">Logout</button>
             </div>
 
@@ -126,11 +130,17 @@
 
                 const data = await response.json();
                 document.getElementById('currentUser').textContent = `Welcome, ${data.username}`;
+                
+                if (!data.userAdmin) {
+                    window.location.href = '/';
+                    return false;
+                }
+                
                 return data.userAdmin;
 
             } catch (error) {
                 console.error('Error checking admin status:', error);
-                window.location.href = '/login';
+                window.location.href = '/';
                 return false;
             }
         }
